@@ -170,3 +170,52 @@ class ThermalModel:
         elif temp < self.TEMP_MIN:
             return self.TEMP_MIN - temp
         return 0.0
+
+
+"""
+    ServerLoadProfile class this class is used to simulate 
+    the hourly changes during the day using sinusoidal function to simulate from
+    peak hour to lower usage hours
+"""
+
+class ServerLoadProfile:
+    """
+    Simulates realistic server load patterns over time.
+
+    Real data centres have predictable daily load patterns:
+    - Low load at night (2–5 AM)
+    - Rising load in morning (8–10 AM)
+    - Peak load during business hours (10 AM – 6 PM)
+    - Declining load in evening
+    """
+
+    def __init__(self, base_load_kw: float = 60.0, noise_std: float = 3.0):
+        self.base_load = base_load_kw
+        self.noise_std = noise_std
+
+    def get_load(self, timestep: int, dt_seconds: float = 60.0) -> float:
+        """
+        Get server load at a given timestep.
+
+        Parameters
+        ----------
+        timestep    : current step in episode
+        dt_seconds  : seconds per step (default 60 = 1 minute)
+        """
+        # Convert timestep to hour of day (0–24)
+        hour_of_day = (timestep * dt_seconds / 3600.0) % 24.0
+
+        # Sinusoidal daily load pattern
+        # Peak at 14:00 (2 PM), trough at 4:00 (4 AM)
+        daily_cycle = np.sin((hour_of_day - 4) * np.pi / 12.0)
+
+        # Scale: base ± 30% variation
+        load_variation = self.base_load * 0.30 * daily_cycle
+        load = self.base_load + load_variation
+
+        # Add random noise (simulates unpredictable bursts)
+        noise = np.random.normal(0, self.noise_std)
+        load = load + noise
+
+        # Clip to realistic operating range
+        return float(np.clip(load, 20.0, self.base_load * 1.5))

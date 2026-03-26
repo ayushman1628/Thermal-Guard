@@ -274,3 +274,21 @@ class DataCentreEnv(_BaseEnv):
         }
 
         return total_reward, components
+    
+    # ─────────────────────────────────────────────────────────────────────
+    # HELPER METHODS
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _get_obs(self) -> np.ndarray:
+        """
+        Build observation vector from current state.
+        """
+        hour_of_day = ((self._start_step + self.timestep) * self.dt_seconds / 3600.0) % 24.0
+
+        return np.array([
+            self.server_temp,
+            self.server_load,
+            self.outside_temp,
+            hour_of_day,
+            self.crac_setpoint,
+        ], dtype=np.float32)

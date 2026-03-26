@@ -292,3 +292,19 @@ class DataCentreEnv(_BaseEnv):
             hour_of_day,
             self.crac_setpoint,
         ], dtype=np.float32)
+    
+    def get_episode_log(self) -> list:
+        """Returns all step data from current episode for analysis."""
+        return self._episode_log.copy()
+
+    def render(self):
+        """Simple terminal render for debugging."""
+        if self.render_mode == "human":
+            safe = "✅" if self.thermal_model.is_in_safe_zone(self.server_temp) else "⚠️ "
+            print(
+                f"Step {self.timestep:4d} | "
+                f"Temp: {self.server_temp:.1f}°C {safe} | "
+                f"Load: {self.server_load:.0f}kW | "
+                f"CRAC: {self.crac_setpoint:.1f}°C | "
+                f"Outside: {self.outside_temp:.1f}°C"
+            )

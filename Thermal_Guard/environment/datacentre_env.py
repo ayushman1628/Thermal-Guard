@@ -230,3 +230,47 @@ class DataCentreEnv(_BaseEnv):
         self.timestep += 1
 
         return self._get_obs(), reward, terminated, truncated, step_log
+    
+
+    # ─────────────────────────────────────────────────────────────────────
+    # REWARD FUNCTION
+    # ─────────────────────────────────────────────────────────────────────
+
+    def _calculate_reward(
+        self,
+        pue: float,
+        server_temp: float,
+        action: float,
+        prev_action: float
+    ) -> Tuple[float, Dict]:
+        """
+            The safety weight (10x) is much higher than efficiency (1x)
+            because temperature violations can damage hardware — we
+            prioritize safety as a hard-ish constraint."
+
+        Returns reward (float) and component breakdown (dict)
+        """
+
+        # ── COMPONENT 1: Efficiency (minimize PUE) ────────────────────
+        # PUE of 1.0 is perfect. We normalize so reward ~ -0.5 to 0.0
+        # at typical operating range (PUE 1.0–2.0)
+        r_efficiency = -(pue - 1.0) * self.w_efficiency
+
+        # ── COMPONENT 2: Safety (temperature violations) ───────────────
+        violation = self.thermal_model.get_violation_magnitude(server_temp)
+        r_safety = -violation * self.w_violation
+
+        # ── COMPONENT 3: Smoothness (avoid rapid setpoint changes) ─────
+        action_change = abs(action - prev_action)
+        r_smoothness = -action_change * self.w_smoothness
+
+        # Total reward
+        total_reward = r_efficiency + r_safety + r_smoothness
+
+        components = {
+            "r_efficiency": r_efficiency,
+            "r_safety":     r_safety,
+            "r_smoothness": r_smoothness,
+        }
+
+        return total_reward, components

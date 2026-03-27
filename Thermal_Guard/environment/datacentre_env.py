@@ -308,3 +308,63 @@ class DataCentreEnv(_BaseEnv):
                 f"CRAC: {self.crac_setpoint:.1f}°C | "
                 f"Outside: {self.outside_temp:.1f}°C"
             )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# QUICK TEST — run this file directly to verify the environment
+# ─────────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    print("=" * 60)
+    print("Testing DataCentreEnv")
+    print("=" * 60)
+
+    env = DataCentreEnv(render_mode="human")
+
+    # Test 1: Environment resets correctly
+    obs, info = env.reset(seed=42)
+    print(f"\nInitial observation:")
+    print(f"  server_temp:   {obs[0]:.2f}°C")
+    print(f"  server_load:   {obs[1]:.2f} kW")
+    print(f"  outside_temp:  {obs[2]:.2f}°C")
+    print(f"  hour_of_day:   {obs[3]:.2f}")
+    print(f"  crac_setpoint: {obs[4]:.2f}°C")
+    print(f"  obs shape:     {obs.shape}  (should be (5,))")
+    print(f"  obs dtype:     {obs.dtype}  (should be float32)")
+
+    # Test 2: Step with a valid action
+    print("\nRunning 5 steps with render:")
+    for i in range(5):
+        action = env.action_space.sample()
+        obs, reward, terminated, truncated, info = env.step(action)
+        env.render()
+        print(f"         → reward={reward:.4f}, PUE={info['pue']:.3f}")
+
+    # Test 3: Full episode with random agent
+    print("\nFull episode — random agent:")
+    obs, _ = env.reset(seed=0)
+    total_reward = 0
+    pue_list = []
+    violations = 0
+
+    for step in range(1440):  # 24 hours
+        action = env.action_space.sample()
+        obs, reward, terminated, truncated, info = env.step(action)
+        total_reward += reward
+        pue_list.append(info["pue"])
+        if info["server_temp"] > 27 or info["server_temp"] < 18:
+            violations += 1
+        if terminated or truncated:
+            break
+
+    print(f"  Steps completed:      {step + 1}")
+    print(f"  Total reward:         {total_reward:.2f}")
+    print(f"  Mean PUE:             {np.mean(pue_list):.3f}")
+    print(f"  Min PUE:              {np.min(pue_list):.3f}")
+    print(f"  Max PUE:              {np.max(pue_list):.3f}")
+    print(f"  Temperature violations: {violations} steps ({violations/14.4:.1f}% of day)")
+
+    # Test 4: Observation and action space checks
+    print(f"\nSpace checks:")
+    print(f"  obs space:    {env.observation_space}")
+    print(f"  action space: {env.action_space}")
+    print(f"  obs in space: {env.observation_space.contains(obs)}")

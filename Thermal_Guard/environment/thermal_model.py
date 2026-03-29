@@ -219,3 +219,23 @@ class ServerLoadProfile:
 
         # Clip to realistic operating range
         return float(np.clip(load, 20.0, self.base_load * 1.5))
+
+
+"""
+    Simulates outdoor temperature variation over a day.
+    This affects CRAC cooling efficiency (COP).
+"""
+class WeatherProfile:
+    #Basic physics and maths to compute outside effects on our model.
+
+    def __init__(self, mean_temp: float = 20.0, amplitude: float = 8.0):
+        self.mean_temp = mean_temp      # average outdoor temp (°C)
+        self.amplitude = amplitude      # daily swing (°C)
+
+    def get_outside_temp(self, timestep: int, dt_seconds: float = 60.0) -> float:
+        """Outside temp peaks at 15:00, troughs at 05:00."""
+        hour_of_day = (timestep * dt_seconds / 3600.0) % 24.0
+        daily_cycle = np.sin((hour_of_day - 5) * np.pi / 12.0)
+        temp = self.mean_temp + self.amplitude * daily_cycle
+        noise = np.random.normal(0, 0.5)
+        return float(np.clip(temp + noise, -10, 45))

@@ -6,6 +6,22 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from environment.datacenter_env import DataCentreEnv
 
 
+class FixedSetpointAgent:
+    """
+    Always returns the same CRAC setpoint regardless of conditions.
+
+    This is the absolute minimum baseline — even a thermostat beats this.
+    We include it to show that naive approaches fail.
+
+    """
+    def __init__(self, setpoint: float = 19.0):
+        self.setpoint = setpoint
+
+    def predict(self, obs: np.ndarray) -> np.ndarray:
+        return np.array([self.setpoint], dtype=np.float32)
+
+
+
 class PIDAgent:
     """
     PID Controller — classical control theory baseline.

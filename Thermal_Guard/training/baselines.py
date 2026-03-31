@@ -21,6 +21,51 @@ class FixedSetpointAgent:
         return np.array([self.setpoint], dtype=np.float32)
 
 
+class RuleBasedAgent:
+    """
+    Thermostat-style rule-based controller.
+
+    Mimics how many data centres are actually controlled today:
+    threshold-based rules written by engineers.
+
+    Rules:
+        - If server temp > 25°C → increase cooling aggressively
+        - If server temp > 22°C → increase cooling moderately
+        - If server temp < 19°C → reduce cooling (save energy)
+        - Otherwise → maintain nominal setpoint
+
+    Also adjusts for server load:
+        - High load → more cooling headroom needed
+        - Low load  → can afford to be less aggressive
+
+    """
+
+    def predict(self, obs: np.ndarray) -> np.ndarray:
+        server_temp    = obs[0]
+        server_load_kw = obs[1]
+
+        # Load factor: high load → need more cooling margin
+        load_factor = (server_load_kw - 60.0) / 40.0  # -0.5 to +1.0
+
+        # Base setpoint from temperature rules
+        if server_temp > 25.0:
+            base_setpoint = 16.5   # aggressive cooling
+        elif server_temp > 23.0:
+            base_setpoint = 18.0   # moderate cooling
+        elif server_temp < 19.0:
+            base_setpoint = 22.0   # save energy
+        elif server_temp < 21.0:
+            base_setpoint = 21.0   # slightly less cooling
+        else:
+            base_setpoint = 19.5   # nominal
+
+        # Adjust for load
+        setpoint = base_setpoint - load_factor * 1.5
+
+        return np.array([np.clip(setpoint, 16.0, 24.0)], dtype=np.float32)
+
+
+
 
 class PIDAgent:
     """

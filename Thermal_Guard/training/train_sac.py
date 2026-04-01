@@ -58,3 +58,38 @@ class DataCentreMetricsCallback(BaseCallback if SB3_AVAILABLE else object):
                 violation = info["server_temp"] > 27.0 or info["server_temp"] < 18.0
                 self.violation_history.append(float(violation))
         return True  # return False to stop training early
+
+
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# TRAINING CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────────
+
+CONFIG = {
+    # Environment
+    "season":           "summer",       # hardest season for cooling
+    "episode_hours":    24.0,           # 24-hour episodes
+
+    # Training
+    "total_timesteps":  300_000,        # 300k steps (~208 episodes)
+                                        # increase to 1M for better performance
+    "eval_freq":        10_000,         # evaluate every 10k steps
+    "n_eval_episodes":  5,              # episodes per evaluation
+
+    # SAC Hyperparameters
+    
+    "learning_rate":    3e-4,           # Adam optimizer lr — standard for SAC
+    "buffer_size":      100_000,        # replay buffer size (memory of past experience)
+    "learning_starts":  2_000,          # steps before training begins (fill buffer first)
+    "batch_size":       256,            # mini-batch size for gradient updates
+    "tau":              0.005,          # soft update rate for target networks
+    "gamma":            0.99,           # discount factor — how much to value future rewards
+                                        # 0.99 = agent cares about next ~100 steps
+    "train_freq":       1,              # update every step
+    "gradient_steps":   1,              # gradient updates per env step
+
+    # Paths
+    "model_dir":        "models",
+    "log_dir":          "results",
+}

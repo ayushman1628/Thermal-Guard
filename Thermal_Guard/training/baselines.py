@@ -108,3 +108,59 @@ class PIDAgent:
         """Call this at the start of each episode."""
         self._integral = 0.0
         self._prev_error = 0.0
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# EVALUATION RUNNER
+# ─────────────────────────────────────────────────────────────────────────
+
+def evaluate_agent(agent, env: DataCentreEnv, n_episodes: int = 10, seed: int = 0) -> dict:
+    """
+    Evaluate any agent (baseline or RL) over multiple episodes.
+    Returns aggregated performance metrics.
+
+    Works with both baseline agents (have .predict method) and
+    stable-baselines3 models (have .predict method too — same interface!).
+    """
+    all_pues        = []
+    all_rewards     = []
+    all_violations  = []
+    episode_rewards = []
+
+    for ep in range(n_episodes):
+        obs, _ = env.reset(seed=seed + ep)
+
+        # Reset PID state if applicable
+        if hasattr(agent, 'reset'):
+            agent.reset()
+
+        episode_reward = 0
+        pues = []
+        violations = 0
+
+        for _ in range(env.max_steps):
+            action = agent.predict(obs)
+            obs, reward, terminated, truncated, info = env.step(action)
+
+            episode_reward += reward
+            pues.append(info["pue"])
+
+            if info["server_temp"] > 27.0 or info["server_temp"] < 18.0:
+                violations += 1
+
+            if terminated or truncated:
+                break
+
+        episode_rewards.append(episode_reward)
+        all_pues.extend(pues)
+        all_violations.append(violations)
+
+    return {
+        "mean_episode_reward":  np.mean(episode_rewards),
+        "std_episode_reward":   np.std(episode_rewards),
+        "mean_pue":             np.mean(all_pues),
+        "std_pue":              np.std(all_pues),
+        "mean_violations_per_episode": np.mean(all_violations),
+        "violation_rate_pct":   np.mean(all_violations) / env.max_steps * 100,
+        "n_episodes":           n_episodes,
+    }        

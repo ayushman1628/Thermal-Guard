@@ -109,6 +109,34 @@ class PIDAgent:
         self._integral = 0.0
         self._prev_error = 0.0
 
+    def predict(self, obs: np.ndarray) -> np.ndarray:
+        server_temp = obs[0]
+
+        # Error = current temp - target temp
+        error = server_temp - self.target_temp
+
+        # Integral: accumulated error over time
+        self._integral += error
+        self._integral = np.clip(self._integral, -50, 50)  # anti-windup
+
+        # Derivative: rate of change
+        derivative = error - self._prev_error
+        self._prev_error = error
+
+        # PID output: higher output = more cooling needed
+        pid_output = (
+            self.Kp * error +
+            self.Ki * self._integral +
+            self.Kd * derivative
+        )
+
+        # Map PID output to CRAC setpoint
+        # When error is 0 (temp = target), we want setpoint = 20°C (nominal)
+        # When error is positive (too hot), lower setpoint (more cooling)
+        setpoint = 20.0 - pid_output
+
+        return np.array([np.clip(setpoint, 16.0, 24.0)], dtype=np.float32)
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # EVALUATION RUNNER

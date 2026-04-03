@@ -93,3 +93,37 @@ CONFIG = {
     "model_dir":        "models",
     "log_dir":          "results",
 }
+
+
+
+def make_env(seed: int = 0, monitor: bool = True):
+    """Create and optionally wrap the environment."""
+    env = DataCentreEnv(season=CONFIG["season"])
+    if SB3_AVAILABLE and monitor:
+        env = Monitor(env, filename=None)
+    return env
+
+
+def train_sac():
+    """Main training function."""
+    print("=" * 65)
+    print("  Data Centre Cooling — SAC Training")
+    print("=" * 65)
+    print(f"  Timesteps: {CONFIG['total_timesteps']:,}")
+    print(f"  Season:    {CONFIG['season']}")
+    print(f"  Gamma:     {CONFIG['gamma']}  (discount factor)")
+    print(f"  Buffer:    {CONFIG['buffer_size']:,}  (replay buffer size)")
+    print()
+
+    # Create directories
+    os.makedirs(CONFIG["model_dir"], exist_ok=True)
+    os.makedirs(CONFIG["log_dir"], exist_ok=True)
+
+    if not SB3_AVAILABLE:
+        print("stable-baselines3 not available. Showing config only.")
+        print("\nTo train, install dependencies:")
+        print("  pip install stable-baselines3[extra] gymnasium")
+        print("\nSAC CONFIG that will be used:")
+        for k, v in CONFIG.items():
+            print(f"  {k}: {v}")
+        return None

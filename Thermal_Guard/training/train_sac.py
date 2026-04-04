@@ -93,3 +93,79 @@ CONFIG = {
     "model_dir":        "models",
     "log_dir":          "results",
 }
+
+
+
+def make_env(seed: int = 0, monitor: bool = True):
+    """Create and optionally wrap the environment."""
+    env = DataCentreEnv(season=CONFIG["season"])
+    if SB3_AVAILABLE and monitor:
+        env = Monitor(env, filename=None)
+    return env
+
+
+def train_sac():
+    """Main training function."""
+    print("=" * 65)
+    print("  Data Centre Cooling — SAC Training")
+    print("=" * 65)
+    print(f"  Timesteps: {CONFIG['total_timesteps']:,}")
+    print(f"  Season:    {CONFIG['season']}")
+    print(f"  Gamma:     {CONFIG['gamma']}  (discount factor)")
+    print(f"  Buffer:    {CONFIG['buffer_size']:,}  (replay buffer size)")
+    print()
+
+    # Create directories
+    os.makedirs(CONFIG["model_dir"], exist_ok=True)
+    os.makedirs(CONFIG["log_dir"], exist_ok=True)
+
+    if not SB3_AVAILABLE:
+        print("stable-baselines3 not available. Showing config only.")
+        print("\nTo train, install dependencies:")
+        print("  pip install stable-baselines3[extra] gymnasium")
+        print("\nSAC CONFIG that will be used:")
+        for k, v in CONFIG.items():
+            print(f"  {k}: {v}")
+        return None
+
+    # ── ENVIRONMENT SETUP ────────────────────────────────────────────
+    print("Step 1: Validating environment...")
+    env = make_env(seed=0)
+    check_env(env.env if hasattr(env, 'env') else env)
+    print("  ✅ Environment valid\n")
+
+    eval_env = DataCentreEnv(season=CONFIG["season"])
+
+    # ── CALLBACKS ────────────────────────────────────────────────────
+    print("Step 2: Setting up callbacks...")
+
+    # EvalCallback: evaluates agent periodically, saves best model
+    eval_callback = EvalCallback(
+        eval_env,
+        best_model_save_path=CONFIG["model_dir"],
+        log_path=CONFIG["log_dir"],
+        eval_freq=CONFIG["eval_freq"],
+        n_eval_episodes=CONFIG["n_eval_episodes"],
+        deterministic=True,     # no exploration noise during eval
+        render=False,
+        verbose=1,
+    )
+
+    # CheckpointCallback: saves model every N steps (resume if crash)
+    checkpoint_callback = CheckpointCallback(
+        save_freq=50_000,
+        save_path=CONFIG["model_dir"],
+        name_prefix="sac_checkpoint",
+        verbose=0,
+    )
+
+    # Custom metrics callback
+    metrics_callback = DataCentreMetricsCallback(verbose=0)
+
+    from stable_baselines3.common.callbacks import CallbackList
+    all_callbacks = CallbackList([
+        eval_callback,
+        checkpoint_callback,
+        metrics_callback,
+    ])
+    print("  ✅ Callbacks ready\n")

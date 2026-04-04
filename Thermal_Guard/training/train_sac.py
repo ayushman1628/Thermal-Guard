@@ -169,3 +169,51 @@ def train_sac():
         metrics_callback,
     ])
     print("  ✅ Callbacks ready\n")
+
+    # ── MODEL CREATION ───────────────────────────────────────────────
+    print("Step 3: Creating SAC model...")
+    model = SAC(
+        policy="MlpPolicy",         # Multi-Layer Perceptron policy
+                                    # (neural network for both actor + critic)
+        env=env,
+        learning_rate=CONFIG["learning_rate"],
+        buffer_size=CONFIG["buffer_size"],
+        learning_starts=CONFIG["learning_starts"],
+        batch_size=CONFIG["batch_size"],
+        tau=CONFIG["tau"],
+        gamma=CONFIG["gamma"],
+        train_freq=CONFIG["train_freq"],
+        gradient_steps=CONFIG["gradient_steps"],
+        verbose=1,
+        tensorboard_log=os.path.join(CONFIG["log_dir"], "tensorboard"),
+        seed=42,
+    )
+
+    # Print network architecture
+    print(f"\n  Actor network:  {model.actor}")
+    print(f"\n  Critic network: {model.critic}\n")
+
+    # ── TRAINING ─────────────────────────────────────────────────────
+    print("Step 4: Training...\n")
+    start_time = datetime.now()
+
+    model.learn(
+        total_timesteps=CONFIG["total_timesteps"],
+        callback=all_callbacks,
+        log_interval=4,         # log every 4 episodes
+        progress_bar=True,
+    )
+
+    duration = datetime.now() - start_time
+    print(f"\n  ✅ Training complete in {duration}")
+
+    # ── SAVE FINAL MODEL ─────────────────────────────────────────────
+    final_path = os.path.join(CONFIG["model_dir"], "sac_final")
+    model.save(final_path)
+    print(f"  ✅ Final model saved to {final_path}.zip")
+
+    # Save config alongside model
+    with open(os.path.join(CONFIG["model_dir"], "sac_config.json"), "w") as f:
+        json.dump(CONFIG, f, indent=2)
+
+    return model, metrics_callback

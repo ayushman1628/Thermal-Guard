@@ -221,3 +221,26 @@ if __name__ == "__main__":
         "Rule-Based (Thermostat)": RuleBasedAgent(),
         "PID Controller":          PIDAgent(target_temp=21.0),
     }
+
+
+    all_results = {}
+    for name, agent in agents.items():
+        print(f"Evaluating: {name}...")
+        results = evaluate_agent(agent, env, n_episodes=5, seed=42)
+        all_results[name] = results
+        print_results(name, results)
+
+    # Summary comparison
+    print(f"\n{'='*60}")
+    print("SUMMARY — Targets for RL agent to beat:")
+    print(f"{'='*60}")
+    print(f"  {'Agent':<30} {'Mean PUE':>10} {'Violations':>12}")
+    print(f"  {'-'*55}")
+    for name, r in all_results.items():
+        print(f"  {name:<30} {r['mean_pue']:>10.4f} {r['violation_rate_pct']:>10.2f}%")
+
+    best = min(all_results.items(), key=lambda x: x[1]["mean_pue"])
+    print(f"\n  Best baseline: {best[0]} (PUE={best[1]['mean_pue']:.4f})")
+    print(f"\n  RL target: PUE < {best[1]['mean_pue']:.4f} with < {best[1]['violation_rate_pct']:.1f}% violations")
+    print("\n✅ Baseline evaluation complete!")
+    print("   Now run: python training/train_sac.py")

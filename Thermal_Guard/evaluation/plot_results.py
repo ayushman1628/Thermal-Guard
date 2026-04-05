@@ -141,3 +141,75 @@ def plot_training_curve(save=True):
         print(f"  ✅ Saved: {path}")
     plt.close()
 
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# PLOT 2: PUE COMPARISON BAR CHART
+# ─────────────────────────────────────────────────────────────────────────
+
+def plot_pue_comparison(sac_pue: float = None, save=True):
+    """
+    Bar chart comparing PUE across all methods.
+    This is your headline result plot.
+    """
+    # Results from baseline evaluation (run training/baselines.py to get real numbers)
+    results = {
+        "Fixed\nSetpoint": {"pue": 1.2127, "std": 0.008, "color": "#555577"},
+        "Rule-Based\n(Thermostat)": {"pue": 1.2107, "std": 0.006, "color": COLORS["rule"]},
+        "PID\nController": {"pue": 1.2094, "std": 0.006, "color": COLORS["pid"]},
+        "SAC\n(Ours)": {
+            "pue": sac_pue if sac_pue else 1.14,   # update after training
+            "std": 0.004,
+            "color": COLORS["sac"]
+        },
+        "Theoretical\nMinimum": {"pue": 1.0, "std": 0.0, "color": "#00ff88"},
+    }
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+    fig.suptitle("Power Usage Effectiveness (PUE) Comparison\nLower = More Energy Efficient",
+                 fontweight="bold", color="white")
+
+    names  = list(results.keys())
+    pues   = [r["pue"] for r in results.values()]
+    stds   = [r["std"] for r in results.values()]
+    colors = [r["color"] for r in results.values()]
+
+    bars = ax.bar(names, pues, color=colors, alpha=0.85, width=0.6,
+                  edgecolor="white", linewidth=0.5, zorder=3)
+    ax.errorbar(names, pues, yerr=stds, fmt='none', color='white',
+                capsize=5, linewidth=1.5, zorder=4)
+
+    # Value labels on bars
+    for bar, pue, std in zip(bars, pues, stds):
+        ax.text(bar.get_x() + bar.get_width()/2., bar.get_height() + 0.004,
+                f"{pue:.4f}", ha='center', va='bottom', fontsize=9,
+                fontweight='bold', color='white')
+
+    # Highlight SAC improvement
+    if sac_pue:
+        rule_pue = results["Rule-Based\n(Thermostat)"]["pue"]
+        improvement = (rule_pue - sac_pue) / rule_pue * 100
+        ax.annotate(
+            f"  {improvement:.1f}% improvement\n  over rule-based",
+            xy=(3, sac_pue), xytext=(3.3, sac_pue + 0.04),
+            arrowprops=dict(arrowstyle="->", color=COLORS["sac"], lw=1.5),
+            color=COLORS["sac"], fontsize=9
+        )
+
+    ax.set_ylabel("Mean PUE (Power Usage Effectiveness)")
+    ax.set_ylim(0.95, 1.28)
+    ax.grid(True, axis='y', zorder=0)
+
+    # Reference lines
+    ax.axhline(y=1.0, color="#00ff88", linestyle="--", linewidth=1, alpha=0.5, label="Perfect PUE = 1.0")
+    ax.axhline(y=1.5, color="#888888", linestyle=":", linewidth=1, alpha=0.5, label="Industry average ≈ 1.55")
+
+    ax.legend(fontsize=8)
+
+    plt.tight_layout()
+
+    if save:
+        path = os.path.join(OUTPUT_DIR, "02_pue_comparison.png")
+        plt.savefig(path, dpi=150, bbox_inches="tight", facecolor=COLORS["bg"])
+        print(f"  ✅ Saved: {path}")
+    plt.close()

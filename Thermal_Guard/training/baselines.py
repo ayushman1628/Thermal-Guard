@@ -109,6 +109,34 @@ class PIDAgent:
         self._integral = 0.0
         self._prev_error = 0.0
 
+    def predict(self, obs: np.ndarray) -> np.ndarray:
+        server_temp = obs[0]
+
+        # Error = current temp - target temp
+        error = server_temp - self.target_temp
+
+        # Integral: accumulated error over time
+        self._integral += error
+        self._integral = np.clip(self._integral, -50, 50)  # anti-windup
+
+        # Derivative: rate of change
+        derivative = error - self._prev_error
+        self._prev_error = error
+
+        # PID output: higher output = more cooling needed
+        pid_output = (
+            self.Kp * error +
+            self.Ki * self._integral +
+            self.Kd * derivative
+        )
+
+        # Map PID output to CRAC setpoint
+        # When error is 0 (temp = target), we want setpoint = 20°C (nominal)
+        # When error is positive (too hot), lower setpoint (more cooling)
+        setpoint = 20.0 - pid_output
+
+        return np.array([np.clip(setpoint, 16.0, 24.0)], dtype=np.float32)
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # EVALUATION RUNNER
@@ -164,3 +192,55 @@ def evaluate_agent(agent, env: DataCentreEnv, n_episodes: int = 10, seed: int = 
         "violation_rate_pct":   np.mean(all_violations) / env.max_steps * 100,
         "n_episodes":           n_episodes,
     }        
+
+    def print_results(name: str, results: dict):
+    """Pretty-print evaluation results."""
+    print(f"\n{'─'*50}")
+    print(f"  {name}")
+    print(f"{'─'*50}")
+    print(f"  Mean Episode Reward:  {results['mean_episode_reward']:>10.2f} ± {results['std_episode_reward']:.2f}")
+    print(f"  Mean PUE:             {results['mean_pue']:>10.4f} ± {results['std_pue']:.4f}")
+    print(f"  Violation Rate:       {results['violation_rate_pct']:>9.2f}%")
+    print(f"  (over {results['n_episodes']} episodes)")
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# RUN BASELINES — run this file directly to see baseline performance
+# ─────────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    print("=" * 60)
+    print("Evaluating Baseline Controllers")
+    print("=" * 60)
+    print("(Run this BEFORE training RL — establishes targets to beat)\n")
+
+    env = DataCentreEnv(season="summer")
+
+    agents = {
+        "Fixed Setpoint (16°C)":  FixedSetpointAgent(setpoint=16.0),
+        "Fixed Setpoint (20°C)":  FixedSetpointAgent(setpoint=20.0),
+        "Rule-Based (Thermostat)": RuleBasedAgent(),
+        "PID Controller":          PIDAgent(target_temp=21.0),
+    }
+
+
+    all_results = {}
+    for name, agent in agents.items():
+        print(f"Evaluating: {name}...")
+        results = evaluate_agent(agent, env, n_episodes=5, seed=42)
+        all_results[name] = results
+        print_results(name, results)
+
+    # Summary comparison
+    print(f"\n{'='*60}")
+    print("SUMMARY — Targets for RL agent to beat:")
+    print(f"{'='*60}")
+    print(f"  {'Agent':<30} {'Mean PUE':>10} {'Violations':>12}")
+    print(f"  {'-'*55}")
+    for name, r in all_results.items():
+        print(f"  {name:<30} {r['mean_pue']:>10.4f} {r['violation_rate_pct']:>10.2f}%")
+
+    best = min(all_results.items(), key=lambda x: x[1]["mean_pue"])
+    print(f"\n  Best baseline: {best[0]} (PUE={best[1]['mean_pue']:.4f})")
+    print(f"\n  RL target: PUE < {best[1]['mean_pue']:.4f} with < {best[1]['violation_rate_pct']:.1f}% violations")
+    print("\n✅ Baseline evaluation complete!")
+    print("   Now run: python training/train_sac.py")

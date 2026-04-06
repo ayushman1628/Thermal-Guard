@@ -328,3 +328,170 @@ def plot_temperature_timeline(trained_model=None, save=True):
         plt.savefig(path, dpi=150, bbox_inches="tight", facecolor=COLORS["bg"])
         print(f"  ✅ Saved: {path}")
     plt.close()
+
+# ─────────────────────────────────────────────────────────────────────────
+# PLOT 4: AGENT POLICY ANALYSIS
+# ─────────────────────────────────────────────────────────────────────────
+
+def plot_policy_analysis(trained_model=None, save=True):
+    """
+    Visualize WHAT the agent learned — the policy itself.
+    Shows how the agent's action varies with state variables.
+    
+    INTERVIEW: "What did the agent actually learn?"
+    → "This heatmap shows the agent's policy — for any combination of
+       server temperature and load, it shows what CRAC setpoint the agent
+       chooses. You can see it learned a smooth policy: higher load and
+       higher temperature → lower setpoint (more cooling). It also learned
+       to be more conservative than rule-based control at high loads."
+    """
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig.suptitle("Agent Policy Analysis\nWhat did the SAC agent learn?",
+                 fontweight="bold", color="white")
+
+    # Use rule-based as proxy if no trained model
+    rule_agent = RuleBasedAgent()
+
+    # ── Heatmap: setpoint vs (server_temp, server_load) ──────────────
+    ax = axes[0]
+    temps = np.linspace(18, 30, 30)
+    loads = np.linspace(20, 100, 30)
+    T, L = np.meshgrid(temps, loads)
+    setpoints = np.zeros_like(T)
+
+    for i, load in enumerate(loads):
+        for j, temp in enumerate(temps):
+            obs = np.array([temp, load, 25.0, 14.0, 20.0], dtype=np.float32)
+            if trained_model is not None:
+                action, _ = trained_model.predict(obs, deterministic=True)
+                setpoints[i, j] = action[0]
+            else:
+                # Show rule-based policy as example
+                setpoints[i, j] = rule_agent.predict(obs)[0]
+
+    im = ax.contourf(T, L, setpoints, levels=20, cmap="RdYlBu_r")
+    plt.colorbar(im, ax=ax, label="CRAC Setpoint (°C)")
+    ax.axvline(x=27, color='red', linestyle='--', linewidth=1, label='Max safe temp')
+    ax.axvline(x=18, color='cyan', linestyle='--', linewidth=1, label='Min safe temp')
+    ax.set_xlabel("Server Temperature (°C)")
+    ax.set_ylabel("Server Load (kW)")
+    title = "SAC Policy" if trained_model else "Rule-Based Policy\n(proxy — train SAC for actual)"
+    ax.set_title(f"{title}\nAction = f(temp, load)")
+    ax.legend(fontsize=7)
+
+    # ── Setpoint vs outside temp ──────────────────────────────────────
+    ax2 = axes[1]
+    outside_temps = np.linspace(-10, 40, 100)
+    setpoints_vs_outside = []
+    for ot in outside_temps:
+        obs = np.array([22.0, 60.0, ot, 14.0, 20.0], dtype=np.float32)
+        if trained_model is not None:
+            action, _ = trained_model.predict(obs, deterministic=True)
+            setpoints_vs_outside.append(action[0])
+        else:
+            setpoints_vs_outside.append(rule_agent.predict(obs)[0])
+
+    ax2.plot(outside_temps, setpoints_vs_outside,
+             color=COLORS["sac"] if trained_model else COLORS["rule"], linewidth=2.5)
+    ax2.fill_between(outside_temps, setpoints_vs_outside, 16,
+                     alpha=0.15, color=COLORS["sac"] if trained_model else COLORS["rule"])
+    ax2.set_xlabel("Outside Temperature (°C)")
+    ax2.set_ylabel("CRAC Setpoint (°C)")
+    ax2.set_title("Policy vs Outside Temp\n(fixed: server=22°C, load=60kW)")
+    ax2.grid(True)
+    ax2.annotate("Higher outside temp\n→ harder to cool\n→ lower setpoint",
+                 xy=(30, setpoints_vs_outside[int(30/50*100)]),
+                 xytext=(15, 17.5), fontsize=7, color="#aaaaaa",
+                 arrowprops=dict(arrowstyle="->", color="#aaaaaa"))
+
+    # ── Setpoint over a day (temporal pattern) ────────────────────────
+    ax3 = axes[2]
+    env = DataCentreEnv(season="summer", initial_temp=22.0)
+    obs, _ = env.reset(seed=42)
+    hours, sac_sets, rule_sets = [], [], []
+
+    if trained_model is not None:
+        rule = RuleBasedAgent()
+        for step in range(1440):
+            action, _ = trained_model.predict(obs, deterministic=True)
+            rule_action = rule.predict(obs)
+            hour = step / 60.0
+            hours.append(hour)
+            sac_sets.append(action[0])
+            rule_sets.append(rule_action[0])
+            obs, _, term, trunc, _ = env.step(action)
+            if term or trunc:
+                break
+
+        ax3.plot(hours, sac_sets,  color=COLORS["sac"],  linewidth=2,   label="SAC")
+        ax3.plot(hours, rule_sets, color=COLORS["rule"], linewidth=1.5, label="Rule-Based", alpha=0.75)
+    else:
+        # Show rule-based over a day
+        rule = RuleBasedAgent()
+        for step in range(1440):
+            rule_action = rule.predict(obs)
+            hours.append(step/60.0)
+            rule_sets.append(rule_action[0])
+            obs, _, term, trunc, _ = env.step(rule_action)
+            if term or trunc:
+                break
+        ax3.plot(hours, rule_sets, color=COLORS["rule"], linewidth=2, label="Rule-Based")
+        ax3.text(12, 19.5, "Train SAC to see\nlearned temporal policy",
+                 ha='center', color='#888888', fontsize=8, style='italic')
+
+    ax3.set_xlabel("Hour of Day")
+    ax3.set_ylabel("CRAC Setpoint (°C)")
+    ax3.set_title("Policy Over 24 Hours\n(temporal patterns learned)")
+    ax3.legend(fontsize=8)
+    ax3.grid(True)
+    ax3.set_xlim(0, 24)
+
+    plt.tight_layout()
+
+    if save:
+        path = os.path.join(OUTPUT_DIR, "04_policy_analysis.png")
+        plt.savefig(path, dpi=150, bbox_inches="tight", facecolor=COLORS["bg"])
+        print(f"  ✅ Saved: {path}")
+    plt.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    print("=" * 60)
+    print("  Generating Portfolio Plots")
+    print("=" * 60)
+
+    # Try to load trained model
+    trained_model = None
+    try:
+        from stable_baselines3 import SAC
+        model_path = "models/best_model.zip"
+        if os.path.exists(model_path):
+            trained_model = SAC.load(model_path)
+            print(f"  ✅ Loaded trained model from {model_path}")
+        else:
+            print("  ⚠️  No trained model found — generating plots with baselines")
+            print("      Train first: python training/train_sac.py\n")
+    except ImportError:
+        print("  ⚠️  stable-baselines3 not installed — using baselines for demo plots\n")
+
+    print("\nGenerating plots...")
+    plot_training_curve(save=True)
+    plot_pue_comparison(sac_pue=None, save=True)
+    plot_temperature_timeline(trained_model=trained_model, save=True)
+    plot_policy_analysis(trained_model=trained_model, save=True)
+
+    print(f"\n✅ All plots saved to {OUTPUT_DIR}/")
+    print("\nPlots generated:")
+    for f in sorted(os.listdir(OUTPUT_DIR)):
+        if f.endswith(".png"):
+            print(f"  📊 {f}")
+
+    print("\nINTERVIEW TIP: Walk through these 4 plots in order:")
+    print("  1. training_curve  → 'Here you can see the agent learning'")
+    print("  2. pue_comparison  → 'This is our headline result — X% improvement'")
+    print("  3. temp_timeline   → 'The agent maintains safety constraints'")
+    print("  4. policy_analysis → 'This shows what the agent actually learned'")   

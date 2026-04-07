@@ -217,3 +217,70 @@ def train_sac():
         json.dump(CONFIG, f, indent=2)
 
     return model, metrics_callback
+
+
+def evaluate_and_compare(model=None):
+    """
+    Compare SAC agent against all baselines.
+    This produces the results table for your portfolio/interviews.
+    """
+    print("\n" + "=" * 65)
+    print("  Final Evaluation: SAC vs Baselines")
+    print("=" * 65)
+
+    env = DataCentreEnv(season=CONFIG["season"])
+    N_EVAL = 10
+
+    # Evaluate baselines
+    agents = {
+        "Rule-Based Controller":  RuleBasedAgent(),
+        "PID Controller":         PIDAgent(target_temp=21.0),
+    }
+
+    all_results = {}
+    for name, agent in agents.items():
+        print(f"\nEvaluating: {name}...")
+        results = evaluate_agent(agent, env, n_episodes=N_EVAL, seed=100)
+        all_results[name] = results
+        print_results(name, results)
+
+    # Evaluate SAC (if available)
+    if model is not None:
+        class SB3Wrapper:
+            """Wrapper so SB3 model works with our evaluate_agent function."""
+            def __init__(self, m): self.m = m
+            def predict(self, obs):
+                action, _ = self.m.predict(obs, deterministic=True)
+                return action
+
+        print(f"\nEvaluating: SAC Agent...")
+        sac_results = evaluate_agent(SB3Wrapper(model), env, n_episodes=N_EVAL, seed=100)
+        all_results["SAC Agent (Ours)"] = sac_results
+        print_results("SAC Agent (Ours)", sac_results)
+    else:
+        print("\n  (SAC not trained — load model to evaluate)")
+
+    # ── RESULTS TABLE ────────────────────────────────────────────────
+    print(f"\n{'='*65}")
+    print("  FINAL RESULTS TABLE")
+    print(f"{'='*65}")
+    print(f"  {'Method':<28} {'Mean PUE':>10} {'Violations':>12} {'Reward':>12}")
+    print(f"  {'-'*63}")
+
+    for name, r in all_results.items():
+        marker = " ← ours" if "SAC" in name else ""
+        print(
+            f"  {name:<28} "
+            f"{r['mean_pue']:>10.4f} "
+            f"{r['violation_rate_pct']:>10.2f}% "
+            f"{r['mean_episode_reward']:>10.1f}"
+            f"{marker}"
+        )
+
+    if "SAC Agent (Ours)" in all_results and "Rule-Based Controller" in all_results:
+        sac_pue  = all_results["SAC Agent (Ours)"]["mean_pue"]
+        base_pue = all_results["Rule-Based Controller"]["mean_pue"]
+        improvement = (base_pue - sac_pue) / base_pue * 100
+        print(f"\n  PUE improvement over rule-based: {improvement:.1f}%")
+
+    return all_results

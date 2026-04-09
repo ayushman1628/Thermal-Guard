@@ -284,3 +284,23 @@ def evaluate_and_compare(model=None):
         print(f"\n  PUE improvement over rule-based: {improvement:.1f}%")
 
     return all_results
+
+# ─────────────────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    result = train_sac()
+
+    if result is not None:
+        model, metrics_cb = result
+        all_results = evaluate_and_compare(model)
+
+        # Save results to JSON
+        results_path = os.path.join(CONFIG["log_dir"], "final_results.json")
+        serializable = {k: {mk: float(mv) for mk, mv in v.items()}
+                        for k, v in all_results.items()}
+        with open(results_path, "w") as f:
+            json.dump(serializable, f, indent=2)
+        print(f"\n  Results saved to {results_path}")
+        print("\n  NEXT STEP: python evaluation/plot_results.py")
+    else:
+        # Demo mode — run comparison without trained RL
+        evaluate_and_compare(model=None)
